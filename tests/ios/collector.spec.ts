@@ -16,7 +16,7 @@ import { createTestResult, sleep } from '../../src/common/utils';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-const BUNDLE_ID = 'com.caniwebview.ios'; // Update with actual bundle ID
+const BUNDLE_ID = 'com.caniwebview.wkwebview';
 const TEST_URL = 'https://collector.openwebdocs.org/';
 const PROXY_PORT = 9222;
 
