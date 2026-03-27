@@ -56,9 +56,11 @@ npm run upload-results
 
 ## Documentation
 
+- [Quick Start](QUICKSTART.md)
 - [Setup Guide](docs/SETUP.md)
 - [Android Testing Guide](docs/ANDROID.md)
 - [iOS Testing Guide](docs/IOS.md)
+- [GitHub Actions](docs/GITHUB_ACTIONS.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 
 ## Test Applications
