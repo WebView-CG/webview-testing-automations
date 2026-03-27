@@ -25,7 +25,6 @@ const PROXY_PORT = 9222;
 test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
   let udid: string;
   let testResult: ReturnType<typeof createTestResult> | null = null;
-  let proxyHandle: { stop: () => void } | null = null;
   
   test.beforeAll(async () => {
     // Initialize test result early
@@ -58,38 +57,30 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
       udid
     });
     
-    // Check if proxy is running, if not try to start it
-    if (!await isProxyRunning(PROXY_PORT)) {
-      console.log('ios-webkit-debug-proxy not running, starting it...');
-      try {
-        proxyHandle = await startProxy(udid, PROXY_PORT);
-      } catch (error) {
-        console.error('Failed to start proxy:', (error as Error).message);
-        console.log('\n⚠️  Please start ios-webkit-debug-proxy manually:');
-        console.log(`   ios_webkit_debug_proxy -c ${udid}:${PROXY_PORT} -d\n`);
-        throw error;
-      }
-    } else {
-      console.log('✓ ios-webkit-debug-proxy is already running');
-      // Give it extra time to be fully ready
-      console.log('Waiting for proxy to be fully ready...');
-      await sleep(3000);
+    // In CI, proxy should already be running
+    // In local dev, user must start it manually
+    const isRunning = await isProxyRunning(PROXY_PORT);
+    console.log(`ios-webkit-debug-proxy status: ${isRunning ? '✓ Running' : '✗ Not running'}`);
+    
+    if (!isRunning) {
+      console.log('\n⚠️  ios-webkit-debug-proxy is not running!');
+      console.log(`Start it with: ios_webkit_debug_proxy -c ${udid}:${PROXY_PORT} -d\n`);
+      throw new Error('ios-webkit-debug-proxy is required but not running');
     }
     
-    console.log('\n⚠️  Prerequisites:');
-    console.log('✓ ios-webkit-debug-proxy is running');
-    console.log('2. CanIWKWebView app must be installed and running');
-    console.log('3. Web Inspector must be enabled in the app\n');
+    // Give proxy time to be fully ready
+    console.log('Waiting for proxy to be fully ready...');
+    await sleep(3000);
+    
+    console.log('\n✓ Prerequisites met:');
+    console.log('  - Simulator booted');
+    console.log('  - ios-webkit-debug-proxy running');
+    console.log('  - Ready to run tests\n');
   });
   
   test.afterAll(async () => {
-    // Stop proxy if we started it
-    if (proxyHandle) {
-      console.log('Stopping ios-webkit-debug-proxy...');
-      proxyHandle.stop();
-    }
-    
-    // Save results only if testResult was initialized
+    // Don't stop proxy - let CI handle it
+    // Just save results
     if (!testResult) {
       console.log('No test results to save');
       return;

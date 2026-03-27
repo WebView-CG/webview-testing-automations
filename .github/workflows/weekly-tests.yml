@@ -160,27 +160,89 @@ jobs:
           echo "SIMULATOR_UDID=$SIMULATOR" >> $GITHUB_ENV
       
       - name: Install ios-webkit-debug-proxy
-        run: brew install ios-webkit-debug-proxy
+        run: |
+          brew install ios-webkit-debug-proxy
+          which ios_webkit_debug_proxy
+          ios_webkit_debug_proxy --help || true
       
       - name: Start ios-webkit-debug-proxy
         run: |
+          echo "Starting ios-webkit-debug-proxy for simulator: ${{ env.SIMULATOR_UDID }}"
+          
+          # Kill any existing proxy
+          pkill -9 ios_webkit_debug_proxy || true
+          sleep 1
+          
           # Start proxy in background for the simulator
-          ios_webkit_debug_proxy -c ${{ env.SIMULATOR_UDID }}:9222 -d &
+          ios_webkit_debug_proxy -c ${{ env.SIMULATOR_UDID }}:9222 -d > proxy.log 2>&1 &
           PROXY_PID=$!
           echo "PROXY_PID=$PROXY_PID" >> $GITHUB_ENV
+          echo "Proxy started with PID $PROXY_PID"
+          
+          # Wait and verify
           sleep 5
-          echo "ios-webkit-debug-proxy started with PID $PROXY_PID"
-          # Verify it's running
-          curl -s http://localhost:9222/json || echo "Warning: Proxy may not be responding yet"
+          
+          # Check if process is still running
+          if ps -p $PROXY_PID > /dev/null; then
+            echo "✓ Proxy process is running"
+          else
+            echo "✗ Proxy process died"
+            cat proxy.log
+            exit 1
+          fi
+          
+          # Check if port is listening
+          lsof -i :9222 || echo "Warning: Port 9222 not listening"
+          
+          # Try to fetch
+          for i in {1..10}; do
+            if curl -s http://localhost:9222/json > /dev/null; then
+              echo "✓ Proxy responding on port 9222"
+              curl -s http://localhost:9222/json | head -20
+              break
+            else
+              echo "Attempt $i: Proxy not responding yet..."
+              sleep 2
+            fi
+          done
+          
+          # Show proxy logs
+          echo "Proxy output:"
+          cat proxy.log
       
       - name: Launch iOS app
         run: |
+          echo "Launching CanIWKWebView app..."
           # Launch the app so it's ready for tests
-          xcrun simctl launch ${{ env.SIMULATOR_UDID }} com.caniwebview.wkwebview || echo "App launch may have failed"
-          sleep 3
+          xcrun simctl launch ${{ env.SIMULATOR_UDID }} com.caniwebview.wkwebview || {
+            echo "Failed to launch app"
+            echo "Checking if app is installed..."
+            xcrun simctl listapps ${{ env.SIMULATOR_UDID }} | grep -i wkwebview || echo "App not found!"
+            exit 1
+          }
+          sleep 5
+          echo "✓ App launched"
+          
+          # Verify WebView is debuggable
+          echo "Checking for debuggable WebViews..."
+          curl -s http://localhost:9222/json | jq '.' || echo "No WebViews found yet"
       
       - name: Run tests
-        run: npm run test:ios
+        run: |
+          echo "Starting iOS WebView tests..."
+          npm run test:ios
+      
+      - name: Show proxy logs on failure
+        if: failure()
+        run: |
+          echo "=== Proxy Logs ==="
+          cat proxy.log || echo "No proxy log found"
+          echo ""
+          echo "=== Process List ==="
+          ps aux | grep -i webkit || true
+          echo ""
+          echo "=== Port Status ==="
+          lsof -i :9222 || echo "Nothing on port 9222"
       
       - name: Upload results to webview-bcd-results
         if: always() && (github.event_name == 'schedule' || inputs.upload_results == 'true')
