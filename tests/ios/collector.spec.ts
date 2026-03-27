@@ -102,12 +102,17 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
     const startTime = Date.now();
     
     try {
-      // Launch app (assumes app is installed)
+      // Try to launch app (will fail gracefully if already running)
       console.log('Launching app...');
-      await launchIOSApp(udid, BUNDLE_ID);
-      
-      // Wait for WebView to be ready
-      await sleep(5000);
+      try {
+        await launchIOSApp(udid, BUNDLE_ID);
+        // Wait for WebView to be ready after launch
+        await sleep(5000);
+      } catch (launchError) {
+        console.log('App may already be running, continuing...');
+        // Give it a moment anyway
+        await sleep(2000);
+      }
       
       // Connect to WKWebView (CDP client)
       const cdp = await connectToWKWebView(udid, BUNDLE_ID, PROXY_PORT);

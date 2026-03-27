@@ -168,8 +168,16 @@ jobs:
           ios_webkit_debug_proxy -c ${{ env.SIMULATOR_UDID }}:9222 -d &
           PROXY_PID=$!
           echo "PROXY_PID=$PROXY_PID" >> $GITHUB_ENV
-          sleep 3
+          sleep 5
           echo "ios-webkit-debug-proxy started with PID $PROXY_PID"
+          # Verify it's running
+          curl -s http://localhost:9222/json || echo "Warning: Proxy may not be responding yet"
+      
+      - name: Launch iOS app
+        run: |
+          # Launch the app so it's ready for tests
+          xcrun simctl launch ${{ env.SIMULATOR_UDID }} com.caniwebview.wkwebview || echo "App launch may have failed"
+          sleep 3
       
       - name: Run tests
         run: npm run test:ios
