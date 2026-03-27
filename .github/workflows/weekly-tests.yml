@@ -77,10 +77,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RESULTS_UPLOAD_TOKEN }}
         run: |
           if [ -f test-results/android-results.json ]; then
+            echo "📁 Found results file"
+            cat test-results/android-results.json | head -20
+            
+            if [ -z "$GITHUB_TOKEN" ]; then
+              echo "❌ RESULTS_UPLOAD_TOKEN secret not set - skipping upload"
+              echo "⚠️  Configure this secret in repository settings to enable automatic uploads"
+              exit 0
+            fi
+            
+            echo "📤 Uploading results..."
             npm run upload-results test-results/android-results.json
             echo "✅ Results uploaded for Android API ${{ matrix.api-level }}"
           else
-            echo "⚠️  No results file found to upload"
+            echo "⚠️  No results file found at test-results/android-results.json"
+            ls -la test-results/ || echo "test-results directory doesn't exist"
           fi
       
       - name: Upload test artifacts
@@ -164,10 +175,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RESULTS_UPLOAD_TOKEN }}
         run: |
           if [ -f test-results/ios-results.json ]; then
+            echo "📁 Found results file"
+            cat test-results/ios-results.json | head -20
+            
+            if [ -z "$GITHUB_TOKEN" ]; then
+              echo "❌ RESULTS_UPLOAD_TOKEN secret not set - skipping upload"
+              echo "⚠️  Configure this secret in repository settings to enable automatic uploads"
+              exit 0
+            fi
+            
+            echo "📤 Uploading results..."
             npm run upload-results test-results/ios-results.json
             echo "✅ Results uploaded for iOS ${{ matrix.ios-version }}"
           else
-            echo "⚠️  No results file found to upload"
+            echo "⚠️  No results file found at test-results/ios-results.json"
+            ls -la test-results/ || echo "test-results directory doesn't exist"
           fi
       
       - name: Upload test artifacts
