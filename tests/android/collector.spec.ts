@@ -1,6 +1,6 @@
 /**
  * Android WebView test against collector.openwebdocs.org
- * Uses Puppeteer for better WebView compatibility
+ * Uses direct CDP WebSocket connection
  */
 
 import { test, expect } from '@playwright/test';
@@ -66,37 +66,46 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
       await launchAndroidApp(deviceId, PACKAGE_NAME, ACTIVITY_NAME);
       
       // Wait for WebView to be ready
-      await sleep(3000);
+      await sleep(5000);
       
-      // Connect to WebView (returns Puppeteer browser/page)
-      const { browser, page } = await connectToWebView(deviceId, PACKAGE_NAME);
+      // Connect to WebView (CDP client)
+      const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
       
-      // Navigate to collector (if not already there)
-      const currentUrl = page.url();
-      console.log(`Current URL: ${currentUrl}`);
+      // Get current URL
+      const { result: { url } } = await cdp.send('Page.getNavigationHistory');
+      console.log(`Current URL: ${url || 'unknown'}`);
       
-      if (!currentUrl.includes('collector.openwebdocs.org')) {
-        await page.goto(TEST_URL, { waitUntil: 'networkidle0', timeout: 30000 });
+      // Navigate if needed
+      if (!url || !url.includes('collector.openwebdocs.org')) {
+        await cdp.send('Page.navigate', { url: TEST_URL });
+        await sleep(3000);
       }
       
-      // Wait for page to be fully loaded
-      await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
-      
-      // Verify page loaded
-      const title = await page.title();
+      // Get page title
+      const { result } = await cdp.send('Runtime.evaluate', {
+        expression: 'document.title',
+        returnByValue: true
+      });
+      const title = result.value;
       console.log('Page title:', title);
+      
       expect(title).toBeTruthy();
       
       // Take screenshot
-      await page.screenshot({ path: 'test-results/android-collector-page.png', fullPage: true });
+      const { data: screenshotData } = await cdp.send('Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: false
+      });
+      
+      await fs.writeFile('test-results/android-collector-page.png', Buffer.from(screenshotData, 'base64'));
       
       testResult.results['page-load'] = {
         status: 'passed',
         duration: Date.now() - startTime,
-        data: { title, url: page.url() }
+        data: { title, url }
       };
       
-      await browser.close();
+      await cdp.close();
     } catch (error) {
       testResult.results['page-load'] = {
         status: 'failed',
@@ -111,25 +120,29 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
     const startTime = Date.now();
     
     try {
-      const { browser, page } = await connectToWebView(deviceId, PACKAGE_NAME);
+      const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
       
-      // Ensure we're on the collector page
-      if (!page.url().includes('collector.openwebdocs.org')) {
-        await page.goto(TEST_URL, { waitUntil: 'networkidle0' });
+      // Check URL
+      const { result: { url } } = await cdp.send('Page.getNavigationHistory');
+      
+      if (!url || !url.includes('collector.openwebdocs.org')) {
+        await cdp.send('Page.navigate', { url: TEST_URL });
+        await sleep(5000);
       }
       
       // Wait for collector to run
-      await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
-      await sleep(5000);
+      await sleep(10000);
       
       // Get collector data
-      const collectorData = await page.evaluate(() => {
-        return {
+      const { result } = await cdp.send('Runtime.evaluate', {
+        expression: `JSON.stringify({
           userAgent: navigator.userAgent,
-          features: (window as any).__collector_results || {}
-        };
+          features: window.__collector_results || {}
+        })`,
+        returnByValue: true
       });
       
+      const collectorData = JSON.parse(result.value);
       console.log('Collector data:', JSON.stringify(collectorData, null, 2));
       
       testResult.results['feature-collection'] = {
@@ -138,7 +151,7 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
         data: collectorData
       };
       
-      await browser.close();
+      await cdp.close();
     } catch (error) {
       testResult.results['feature-collection'] = {
         status: 'failed',
@@ -153,11 +166,11 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
     const startTime = Date.now();
     
     try {
-      const { browser, page } = await connectToWebView(deviceId, PACKAGE_NAME);
+      const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
       
       // Test basic JavaScript features
-      const jsTests = await page.evaluate(() => {
-        return {
+      const { result } = await cdp.send('Runtime.evaluate', {
+        expression: `JSON.stringify({
           localStorage: typeof localStorage !== 'undefined',
           sessionStorage: typeof sessionStorage !== 'undefined',
           indexedDB: typeof indexedDB !== 'undefined',
@@ -168,10 +181,12 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
           webgl: (() => {
             const canvas = document.createElement('canvas');
             return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
-          })(),
-        };
+          })()
+        })`,
+        returnByValue: true
       });
       
+      const jsTests = JSON.parse(result.value);
       console.log('JavaScript features:', jsTests);
       
       testResult.results['javascript-features'] = {
@@ -180,7 +195,7 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
         data: jsTests
       };
       
-      await browser.close();
+      await cdp.close();
     } catch (error) {
       testResult.results['javascript-features'] = {
         status: 'failed',

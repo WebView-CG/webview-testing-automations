@@ -1,12 +1,11 @@
 /**
  * Android WebView connection utilities
- * Handles connecting to Android WebView via Chrome DevTools Protocol using Puppeteer
+ * Uses raw CDP WebSocket connection to avoid unsupported browser-level commands
  */
 
-import { chromium, Browser, BrowserContext, Page } from '@playwright/test';
-import puppeteer from 'puppeteer-core';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { CDPClient } from './cdp-client';
 
 const execAsync = promisify(exec);
 
@@ -92,9 +91,9 @@ export async function installAPK(deviceId: string, apkPath: string): Promise<voi
 }
 
 /**
- * Connect to Android WebView using Puppeteer (better WebView compatibility than Playwright)
+ * Connect to Android WebView using raw CDP WebSocket
  */
-export async function connectToWebView(deviceId: string, packageName: string, localPort: number = 9222): Promise<{ browser: any; page: any }> {
+export async function connectToWebView(deviceId: string, packageName: string, localPort: number = 9222): Promise<CDPClient> {
   // Get WebView sockets
   const webviews = await getWebViewSockets(deviceId);
   
@@ -141,19 +140,15 @@ export async function connectToWebView(deviceId: string, packageName: string, lo
   console.log(`Connecting to page: ${pageInfo.title || pageInfo.url}`);
   console.log(`WebSocket URL: ${pageInfo.webSocketDebuggerUrl}`);
   
-  // Use Puppeteer to connect - it handles WebView better than Playwright
-  const browser = await puppeteer.connect({
-    browserWSEndpoint: pageInfo.webSocketDebuggerUrl,
-    defaultViewport: null,
-  });
+  // Connect to CDP WebSocket directly
+  const client = await CDPClient.connect(pageInfo.webSocketDebuggerUrl);
   
-  const browserPages = await browser.pages();
+  // Enable required domains
+  await client.send('Runtime.enable');
+  await client.send('Page.enable');
+  await client.send('Network.enable');
   
-  if (browserPages.length === 0) {
-    throw new Error('No pages found after connection');
-  }
-  
-  return { browser, page: browserPages[0] };
+  return client;
 }
 
 /**
