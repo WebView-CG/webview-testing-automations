@@ -128,8 +128,26 @@ export async function connectToWebView(deviceId: string, packageName: string, lo
   // Forward port
   await forwardWebViewPort(deviceId, targetWebView.socketName, localPort);
   
-  // Connect Playwright to the WebView
-  const browser = await chromium.connectOverCDP(`http://localhost:${localPort}`);
+  // Get the WebSocket endpoint URL for the page
+  // Android WebView exposes pages at /json endpoint
+  const response = await fetch(`http://localhost:${localPort}/json`);
+  const pages = await response.json();
+  
+  if (!pages || pages.length === 0) {
+    throw new Error('No pages found in WebView. Make sure a page is loaded.');
+  }
+  
+  // Get the first page's WebSocket debugger URL
+  const pageInfo = pages[0];
+  console.log(`Connecting to page: ${pageInfo.title || pageInfo.url}`);
+  
+  // Connect directly to the page's WebSocket endpoint
+  // Use connectOverCDP with the specific endpoint URL
+  const browser = await chromium.connectOverCDP({
+    endpointURL: `http://localhost:${localPort}`,
+    wsEndpoint: pageInfo.webSocketDebuggerUrl
+  });
+  
   const contexts = browser.contexts();
   
   if (contexts.length === 0) {
@@ -137,15 +155,15 @@ export async function connectToWebView(deviceId: string, packageName: string, lo
   }
   
   const context = contexts[0];
-  const pages = context.pages();
+  const contextPages = context.pages();
   
-  if (pages.length === 0) {
+  if (contextPages.length === 0) {
     // Wait for page to be created
     const page = await context.waitForEvent('page', { timeout: 10000 });
     return { browser, context, page };
   }
   
-  return { browser, context, page: pages[0] };
+  return { browser, context, page: contextPages[0] };
 }
 
 /**
