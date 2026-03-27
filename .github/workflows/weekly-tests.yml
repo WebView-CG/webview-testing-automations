@@ -111,9 +111,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ios-version: '17.2'
-            xcode-version: '26.0.1'
-          - ios-version: '17.4'
+          - ios-version: '26.0.1'
             xcode-version: '26.0.1'
     
     steps:
