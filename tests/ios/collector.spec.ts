@@ -10,7 +10,9 @@ import {
   launchIOSApp,
   getDeviceInfo,
   getIOSVersion,
-  connectToWKWebView
+  connectToWKWebView,
+  isProxyRunning,
+  startProxy
 } from '../../src/ios/webview-helper';
 import { createTestResult, sleep } from '../../src/common/utils';
 import * as fs from 'fs/promises';
@@ -23,6 +25,7 @@ const PROXY_PORT = 9222;
 test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
   let udid: string;
   let testResult: ReturnType<typeof createTestResult>;
+  let proxyHandle: { stop: () => void } | null = null;
   
   test.beforeAll(async () => {
     // Get booted simulator
@@ -39,6 +42,20 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
     udid = simulators[0].udid;
     console.log(`Using simulator: ${udid} (${simulators[0].name})`);
     
+    // Check if proxy is running, if not try to start it
+    if (!await isProxyRunning(PROXY_PORT)) {
+      console.log('ios-webkit-debug-proxy not running, starting it...');
+      try {
+        proxyHandle = await startProxy(udid, PROXY_PORT);
+      } catch (error) {
+        console.error('Failed to start proxy:', (error as Error).message);
+        console.log('\n⚠️  Please start ios-webkit-debug-proxy manually:');
+        console.log(`   ios_webkit_debug_proxy -c ${udid}:${PROXY_PORT} -d\n`);
+        throw error;
+      }
+    } else {
+      console.log('✓ ios-webkit-debug-proxy is already running');
+    }
     // Initialize test result
     testResult = createTestResult('ios');
     
@@ -56,13 +73,18 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
     });
     
     console.log('\n⚠️  Prerequisites:');
-    console.log('1. ios-webkit-debug-proxy must be running:');
-    console.log(`   ios_webkit_debug_proxy -c ${udid}:${PROXY_PORT} -d`);
+    console.log('✓ ios-webkit-debug-proxy is running');
     console.log('2. CanIWKWebView app must be installed and running');
     console.log('3. Web Inspector must be enabled in the app\n');
   });
   
   test.afterAll(async () => {
+    // Stop proxy if we started it
+    if (proxyHandle) {
+      console.log('Stopping ios-webkit-debug-proxy...');
+      proxyHandle.stop();
+    }
+    
     // Save results
     const resultsDir = path.join(process.cwd(), 'test-results');
     await fs.mkdir(resultsDir, { recursive: true });

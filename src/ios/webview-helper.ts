@@ -103,6 +103,47 @@ export async function getIOSVersion(udid: string): Promise<string> {
 }
 
 /**
+ * Check if ios-webkit-debug-proxy is running
+ */
+export async function isProxyRunning(port: number = 9222): Promise<boolean> {
+  try {
+    const response = await fetch(`http://localhost:${port}/json`, {
+      signal: AbortSignal.timeout(2000)
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start ios-webkit-debug-proxy for a device
+ */
+export async function startProxy(udid: string, port: number = 9222): Promise<{ stop: () => void }> {
+  console.log(`Starting ios-webkit-debug-proxy on port ${port}...`);
+  
+  const proc = exec(`ios_webkit_debug_proxy -c ${udid}:${port} -d`);
+  
+  // Wait for proxy to be ready
+  let attempts = 0;
+  while (attempts < 10) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (await isProxyRunning(port)) {
+      console.log('✓ ios-webkit-debug-proxy started successfully');
+      return {
+        stop: () => {
+          proc.kill();
+        }
+      };
+    }
+    attempts++;
+  }
+  
+  proc.kill();
+  throw new Error('Failed to start ios-webkit-debug-proxy - is it installed? (brew install ios-webkit-debug-proxy)');
+}
+
+/**
  * Connect to WKWebView using ios-webkit-debug-proxy
  * Note: Requires ios_webkit_debug_proxy to be installed and running
  */
@@ -113,6 +154,16 @@ export async function connectToWKWebView(
 ): Promise<CDPClient> {
   // ios-webkit-debug-proxy should be running on port 9221 (default)
   // It exposes each device/simulator on sequential ports
+  
+  // Check if proxy is running
+  if (!await isProxyRunning(localPort)) {
+    throw new Error(
+      `ios-webkit-debug-proxy is not running on port ${localPort}.\n\n` +
+      `Start it manually:\n` +
+      `  ios_webkit_debug_proxy -c ${udid}:${localPort} -d\n\n` +
+      `Or let the test start it automatically by calling startProxy() first.`
+    );
+  }
   
   // For simulator, we can use Safari Remote Debugging directly
   // Get the WebSocket endpoint
