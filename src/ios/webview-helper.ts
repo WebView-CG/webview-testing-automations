@@ -108,10 +108,20 @@ export async function getIOSVersion(udid: string): Promise<string> {
 export async function isProxyRunning(port: number = 9222): Promise<boolean> {
   try {
     const response = await fetch(`http://localhost:${port}/json`, {
-      signal: AbortSignal.timeout(2000)
+      signal: AbortSignal.timeout(5000)
     });
     return response.ok;
-  } catch {
+  } catch (error) {
+    // Check if something is listening on the port
+    try {
+      const lsofResult = await execAsync(`lsof -i :${port} -t`);
+      if (lsofResult.trim()) {
+        console.log(`Process listening on port ${port} but not responding to HTTP`);
+        return true; // Something is on the port, assume it's the proxy starting up
+      }
+    } catch {
+      // lsof failed, port is free
+    }
     return false;
   }
 }

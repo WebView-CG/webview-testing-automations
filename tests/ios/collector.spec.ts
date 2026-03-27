@@ -71,6 +71,9 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
       }
     } else {
       console.log('✓ ios-webkit-debug-proxy is already running');
+      // Give it extra time to be fully ready
+      console.log('Waiting for proxy to be fully ready...');
+      await sleep(3000);
     }
     
     console.log('\n⚠️  Prerequisites:');
