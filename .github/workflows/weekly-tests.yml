@@ -153,7 +153,7 @@ jobs:
       
       - name: Boot simulator and install app
         run: |
-          SIMULATOR=$(xcrun simctl list devices available | grep "iPhone 15" | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
+          SIMULATOR=$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
           echo "Using simulator: $SIMULATOR"
           xcrun simctl boot $SIMULATOR
           xcrun simctl install $SIMULATOR apps/CanIWKWebView/build/Build/Products/Debug-iphonesimulator/CanIWKWebView.app
