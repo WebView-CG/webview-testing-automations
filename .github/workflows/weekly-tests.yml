@@ -181,17 +181,20 @@ jobs:
           xcrun simctl install $SIMULATOR apps/CanIWKWebView/build/Build/Products/Debug-iphonesimulator/CanIWKWebView.app
           echo "SIMULATOR_UDID=$SIMULATOR" >> $GITHUB_ENV
       
-      - name: Launch iOS app
+      - name: Verify app installation
         run: |
-          echo "Launching CanIWKWebView app..."
-          xcrun simctl launch ${{ env.SIMULATOR_UDID }} com.caniwebview.wkwebview || {
-            echo "Failed to launch app"
-            echo "Checking if app is installed..."
-            xcrun simctl listapps ${{ env.SIMULATOR_UDID }} | grep -i wkwebview || echo "App not found!"
+          echo "Checking if app is installed..."
+          xcrun simctl listapps ${{ env.SIMULATOR_UDID }} | grep -i caniwebview || {
+            echo "❌ App not found!"
             exit 1
           }
-          sleep 5
-          echo "✓ App launched"
+          echo "✓ App is installed"
+      
+      - name: Launch iOS app via Appium
+        run: |
+          echo "App will be launched by Appium when tests start"
+          echo "Bundle ID: com.caniwebview.wkwebview"
+          echo "Simulator ready for testing"
       
       - name: Run tests
         run: |

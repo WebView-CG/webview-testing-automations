@@ -87,32 +87,39 @@ export async function connectToIOSWebView(
       'appium:automationName': 'XCUITest',
       'appium:noReset': true,
       'appium:webviewConnectTimeout': 30000,
+      'appium:autoLaunch': true,
+      'appium:newCommandTimeout': 300,
     },
   };
 
   console.log('Connecting to iOS WebView via Appium...');
+  console.log(`Bundle ID: ${bundleId}`);
+  console.log(`Simulator: ${udid}`);
+  
   const driver = await remote(opts);
+  console.log('✓ Appium session created');
   
-  // Wait for WebView context
-  await driver.pause(3000);
-  
-  // List contexts
-  const contexts = await driver.getContexts();
-  console.log('Available contexts:', contexts);
-  
-  // Switch to WebView context
-  const webviewContext = contexts.find(ctx => 
-    ctx !== 'NATIVE_APP' && ctx.includes('WEBVIEW')
-  );
-  
-  if (!webviewContext) {
-    throw new Error('No WebView context found');
+  // Wait for WebView context to appear
+  console.log('Waiting for WebView context...');
+  let contexts: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    contexts = await driver.getContexts();
+    const webviewContext = contexts.find(ctx => 
+      ctx !== 'NATIVE_APP' && ctx.includes('WEBVIEW')
+    );
+    
+    if (webviewContext) {
+      console.log(`✓ Found WebView context: ${webviewContext}`);
+      await driver.switchContext(webviewContext);
+      console.log(`✓ Switched to context: ${webviewContext}`);
+      return driver;
+    }
+    
+    console.log(`Attempt ${i + 1}/20: Available contexts:`, contexts);
+    await driver.pause(1000);
   }
   
-  await driver.switchContext(webviewContext);
-  console.log(`✓ Switched to context: ${webviewContext}`);
-  
-  return driver;
+  throw new Error(`No WebView context found after 20 seconds. Available contexts: ${contexts.join(', ')}`);
 }
 
 /**
