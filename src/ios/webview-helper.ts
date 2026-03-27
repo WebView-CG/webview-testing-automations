@@ -1,11 +1,11 @@
 /**
  * iOS WKWebView connection utilities
- * Handles connecting Playwright to iOS WKWebView
+ * Uses ios-webkit-debug-proxy for remote debugging
  */
 
-import { webkit, Browser, BrowserContext, Page } from '@playwright/test';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { CDPClient } from '../android/cdp-client';
 
 const execAsync = promisify(exec);
 
@@ -103,22 +103,63 @@ export async function getIOSVersion(udid: string): Promise<string> {
 }
 
 /**
- * Connect Playwright to WKWebView
- * Note: This is more complex than Android and may require Appium
+ * Connect to WKWebView using ios-webkit-debug-proxy
+ * Note: Requires ios_webkit_debug_proxy to be installed and running
  */
 export async function connectToWKWebView(
   udid: string,
-  bundleId: string
-): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
-  // For WKWebView, we typically need to use Appium's WebDriver interface
-  // or connect via Safari Remote Debugging Protocol
+  bundleId: string,
+  localPort: number = 9222
+): Promise<CDPClient> {
+  // ios-webkit-debug-proxy should be running on port 9221 (default)
+  // It exposes each device/simulator on sequential ports
   
-  // This is a placeholder - actual implementation depends on the approach:
-  // Option 1: Use Appium with WebKit automation
-  // Option 2: Use ios-webkit-debug-proxy for remote debugging
-  // Option 3: Use Safari RemoteAutomation (requires Safari Technology Preview)
+  // For simulator, we can use Safari Remote Debugging directly
+  // Get the WebSocket endpoint
+  const inspectorUrl = `http://localhost:${localPort}`;
   
-  throw new Error('iOS WKWebView connection not yet implemented. See docs/IOS.md for implementation options.');
+  try {
+    // List available pages
+    const response = await fetch(`${inspectorUrl}/json`);
+    const pages = await response.json();
+    
+    if (!pages || pages.length === 0) {
+      throw new Error(
+        `No WebView pages found for ${bundleId}.\n` +
+        `Make sure:\n` +
+        `1. The app is running and has loaded a page\n` +
+        `2. Web Inspector is enabled in the app\n` +
+        `3. ios-webkit-debug-proxy is running (brew install ios-webkit-debug-proxy)`
+      );
+    }
+    
+    // Find page matching our app
+    const targetPage = pages.find((p: any) => 
+      p.url && !p.url.startsWith('about:') && !p.url.startsWith('data:')
+    ) || pages[0];
+    
+    console.log(`Connecting to WKWebView: ${targetPage.title || targetPage.url}`);
+    console.log(`WebSocket URL: ${targetPage.webSocketDebuggerUrl}`);
+    
+    // Connect to CDP WebSocket
+    const client = await CDPClient.connect(targetPage.webSocketDebuggerUrl);
+    
+    // Enable required domains
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('Network.enable');
+    
+    return client;
+  } catch (error) {
+    throw new Error(
+      `Failed to connect to WKWebView: ${(error as Error).message}\n\n` +
+      `Setup instructions:\n` +
+      `1. Install: brew install ios-webkit-debug-proxy\n` +
+      `2. Start proxy: ios_webkit_debug_proxy -c ${udid}:${localPort} -d\n` +
+      `3. Enable Web Inspector in your iOS app\n` +
+      `4. Ensure app is running with a WebView loaded`
+    );
+  }
 }
 
 /**
