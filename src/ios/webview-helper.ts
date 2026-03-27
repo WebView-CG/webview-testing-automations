@@ -122,25 +122,51 @@ export async function isProxyRunning(port: number = 9222): Promise<boolean> {
 export async function startProxy(udid: string, port: number = 9222): Promise<{ stop: () => void }> {
   console.log(`Starting ios-webkit-debug-proxy on port ${port}...`);
   
+  // Check if ios-webkit-debug-proxy is installed
+  try {
+    await execAsync('which ios_webkit_debug_proxy');
+  } catch {
+    throw new Error(
+      'ios-webkit-debug-proxy is not installed.\n' +
+      'Install it with: brew install ios-webkit-debug-proxy'
+    );
+  }
+  
   const proc = exec(`ios_webkit_debug_proxy -c ${udid}:${port} -d`);
+  
+  // Capture errors
+  let errorOutput = '';
+  proc.stderr?.on('data', (data) => {
+    errorOutput += data.toString();
+  });
+  proc.stdout?.on('data', (data) => {
+    console.log('proxy:', data.toString().trim());
+  });
   
   // Wait for proxy to be ready
   let attempts = 0;
-  while (attempts < 10) {
+  while (attempts < 15) {
     await new Promise(resolve => setTimeout(resolve, 1000));
     if (await isProxyRunning(port)) {
       console.log('✓ ios-webkit-debug-proxy started successfully');
       return {
         stop: () => {
-          proc.kill();
+          proc.kill('SIGTERM');
         }
       };
     }
     attempts++;
   }
   
-  proc.kill();
-  throw new Error('Failed to start ios-webkit-debug-proxy - is it installed? (brew install ios-webkit-debug-proxy)');
+  proc.kill('SIGTERM');
+  throw new Error(
+    `Failed to start ios-webkit-debug-proxy after ${attempts} seconds.\n` +
+    `Error output: ${errorOutput || 'none'}\n` +
+    `Make sure:\n` +
+    `1. ios-webkit-debug-proxy is installed: brew install ios-webkit-debug-proxy\n` +
+    `2. Port ${port} is not already in use\n` +
+    `3. Simulator UDID is correct: ${udid}`
+  );
 }
 
 /**

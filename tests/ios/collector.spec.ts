@@ -24,10 +24,13 @@ const PROXY_PORT = 9222;
 
 test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
   let udid: string;
-  let testResult: ReturnType<typeof createTestResult>;
+  let testResult: ReturnType<typeof createTestResult> | null = null;
   let proxyHandle: { stop: () => void } | null = null;
   
   test.beforeAll(async () => {
+    // Initialize test result early
+    testResult = createTestResult('ios');
+    
     // Get booted simulator
     const simulators = await getBootedSimulators();
     
@@ -41,6 +44,19 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
     
     udid = simulators[0].udid;
     console.log(`Using simulator: ${udid} (${simulators[0].name})`);
+    
+    // Update test result with device info
+    const deviceInfo = await getDeviceInfo(udid);
+    testResult.osVersion = deviceInfo.ios_version || 'unknown';
+    testResult.deviceModel = deviceInfo.name || 'unknown';
+    testResult.webviewVersion = `iOS ${testResult.osVersion} WebKit`;
+    testResult.testUrl = TEST_URL;
+    
+    console.log('Simulator Info:', {
+      name: testResult.deviceModel,
+      osVersion: testResult.osVersion,
+      udid
+    });
     
     // Check if proxy is running, if not try to start it
     if (!await isProxyRunning(PROXY_PORT)) {
@@ -56,21 +72,6 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
     } else {
       console.log('✓ ios-webkit-debug-proxy is already running');
     }
-    // Initialize test result
-    testResult = createTestResult('ios');
-    
-    // Get device info
-    const deviceInfo = await getDeviceInfo(udid);
-    testResult.osVersion = deviceInfo.ios_version || 'unknown';
-    testResult.deviceModel = deviceInfo.name || 'unknown';
-    testResult.webviewVersion = `iOS ${testResult.osVersion} WebKit`;
-    testResult.testUrl = TEST_URL;
-    
-    console.log('Simulator Info:', {
-      name: testResult.deviceModel,
-      osVersion: testResult.osVersion,
-      udid
-    });
     
     console.log('\n⚠️  Prerequisites:');
     console.log('✓ ios-webkit-debug-proxy is running');
@@ -85,7 +86,11 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
       proxyHandle.stop();
     }
     
-    // Save results
+    // Save results only if testResult was initialized
+    if (!testResult) {
+      console.log('No test results to save');
+      return;
+    }
     const resultsDir = path.join(process.cwd(), 'test-results');
     await fs.mkdir(resultsDir, { recursive: true });
     const resultsPath = path.join(resultsDir, 'ios-results.json');
