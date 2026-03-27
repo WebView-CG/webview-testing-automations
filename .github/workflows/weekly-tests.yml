@@ -23,10 +23,10 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -106,22 +106,22 @@ jobs:
   
   test-ios-webview:
     name: iOS WKWebView
-    runs-on: macos-14
+    runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:
         include:
           - ios-version: '17.2'
-            xcode-version: '15.2'
+            xcode-version: '26.0.1'
           - ios-version: '17.4'
-            xcode-version: '15.3'
+            xcode-version: '26.0.1'
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
