@@ -1,0 +1,92 @@
+name: iOS WKWebView Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  test-ios:
+    runs-on: macos-14
+    strategy:
+      matrix:
+        ios-version: ['16.4', '17.0']
+        device: ['iPhone 13', 'iPhone 15']
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Appium drivers
+        run: |
+          npx appium driver install xcuitest
+      
+      - name: Clone iOS app
+        run: |
+          npm run setup:ios-app
+      
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
+      
+      - name: List available simulators
+        run: xcrun simctl list devices available
+      
+      - name: Build iOS app
+        run: |
+          cd apps/CanIWKWebView
+          xcodebuild -project CanIWKWebView.xcodeproj \
+            -scheme CanIWKWebView \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build
+      
+      - name: Boot simulator
+        run: |
+          DEVICE_UDID=$(xcrun simctl create "Test iPhone" "com.apple.CoreSimulator.SimDeviceType.${{ matrix.device }}" "com.apple.CoreSimulator.SimRuntime.iOS-${{ matrix.ios-version }}")
+          xcrun simctl boot $DEVICE_UDID
+          echo "DEVICE_UDID=$DEVICE_UDID" >> $GITHUB_ENV
+      
+      - name: Install app on simulator
+        run: |
+          xcrun simctl install $DEVICE_UDID apps/CanIWKWebView/build/Build/Products/Debug-iphonesimulator/CanIWKWebView.app
+      
+      - name: Start Appium server
+        run: |
+          npx appium &
+          sleep 5
+      
+      - name: Run tests
+        run: npm run test:ios
+      
+      - name: Upload test results
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.RESULTS_UPLOAD_TOKEN }}
+        run: |
+          if [ -f test-results/ios-results.json ]; then
+            npm run upload-results test-results/ios-results.json
+          fi
+      
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results-${{ matrix.device }}-${{ matrix.ios-version }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 30

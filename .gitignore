@@ -1,0 +1,32 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+
+# Test artifacts
+test-results/
+playwright-report/
+screenshots/
+videos/
+
+# Cloned apps
+apps/*
+!apps/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.apk
+*.ipa
+*.app
+*.aab

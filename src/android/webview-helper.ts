@@ -1,0 +1,166 @@
+/**
+ * Android WebView connection utilities
+ * Handles connecting Playwright to Android WebView via Chrome DevTools Protocol
+ */
+
+import { chromium, Browser, BrowserContext, Page } from '@playwright/test';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+export interface AndroidDevice {
+  deviceId: string;
+  webViewPackage: string;
+}
+
+export interface WebViewInfo {
+  socketName: string;
+  pid: string;
+  packageName: string;
+}
+
+/**
+ * Get list of connected Android devices
+ */
+export async function getConnectedDevices(): Promise<string[]> {
+  const { stdout } = await execAsync('adb devices');
+  const lines = stdout.split('\n').slice(1);
+  return lines
+    .filter(line => line.includes('device'))
+    .map(line => line.split('\t')[0])
+    .filter(Boolean);
+}
+
+/**
+ * Get WebView debugging sockets on device
+ */
+export async function getWebViewSockets(deviceId: string): Promise<WebViewInfo[]> {
+  try {
+    const { stdout } = await execAsync(`adb -s ${deviceId} shell cat /proc/net/unix | grep webview_devtools_remote`);
+    const webviews: WebViewInfo[] = [];
+    
+    for (const line of stdout.split('\n')) {
+      const match = line.match(/@webview_devtools_remote_(\d+)/);
+      if (match) {
+        const pid = match[1];
+        // Get package name from PID
+        try {
+          const { stdout: psOut } = await execAsync(`adb -s ${deviceId} shell ps -p ${pid} -o NAME=`);
+          const packageName = psOut.trim();
+          webviews.push({
+            socketName: `webview_devtools_remote_${pid}`,
+            pid,
+            packageName
+          });
+        } catch (e) {
+          // Process might have ended
+        }
+      }
+    }
+    
+    return webviews;
+  } catch (error) {
+    console.error('Failed to get WebView sockets:', error);
+    return [];
+  }
+}
+
+/**
+ * Forward WebView debugging port from device to local machine
+ */
+export async function forwardWebViewPort(deviceId: string, socketName: string, localPort: number): Promise<void> {
+  await execAsync(`adb -s ${deviceId} forward tcp:${localPort} localabstract:${socketName}`);
+}
+
+/**
+ * Launch Android app via adb
+ */
+export async function launchAndroidApp(deviceId: string, packageName: string, activityName: string): Promise<void> {
+  await execAsync(`adb -s ${deviceId} shell am start -n ${packageName}/${activityName}`);
+  // Give app time to start
+  await new Promise(resolve => setTimeout(resolve, 3000));
+}
+
+/**
+ * Install APK on device
+ */
+export async function installAPK(deviceId: string, apkPath: string): Promise<void> {
+  await execAsync(`adb -s ${deviceId} install -r ${apkPath}`);
+}
+
+/**
+ * Connect Playwright to Android WebView
+ */
+export async function connectToWebView(deviceId: string, packageName: string, localPort: number = 9222): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
+  // Get WebView sockets
+  const webviews = await getWebViewSockets(deviceId);
+  const targetWebView = webviews.find(wv => wv.packageName.includes(packageName));
+  
+  if (!targetWebView) {
+    throw new Error(`No WebView found for package: ${packageName}`);
+  }
+  
+  // Forward port
+  await forwardWebViewPort(deviceId, targetWebView.socketName, localPort);
+  
+  // Connect Playwright to the WebView
+  const browser = await chromium.connectOverCDP(`http://localhost:${localPort}`);
+  const contexts = browser.contexts();
+  
+  if (contexts.length === 0) {
+    throw new Error('No browser contexts found');
+  }
+  
+  const context = contexts[0];
+  const pages = context.pages();
+  
+  if (pages.length === 0) {
+    // Wait for page to be created
+    const page = await context.waitForEvent('page', { timeout: 10000 });
+    return { browser, context, page };
+  }
+  
+  return { browser, context, page: pages[0] };
+}
+
+/**
+ * Get Android device info
+ */
+export async function getDeviceInfo(deviceId: string): Promise<Record<string, string>> {
+  const properties = [
+    'ro.build.version.release',      // Android version
+    'ro.build.version.sdk',          // SDK version
+    'ro.product.manufacturer',       // Manufacturer
+    'ro.product.model',              // Model
+    'ro.build.version.security_patch', // Security patch
+  ];
+  
+  const info: Record<string, string> = {};
+  
+  for (const prop of properties) {
+    try {
+      const { stdout } = await execAsync(`adb -s ${deviceId} shell getprop ${prop}`);
+      info[prop] = stdout.trim();
+    } catch (e) {
+      info[prop] = 'unknown';
+    }
+  }
+  
+  return info;
+}
+
+/**
+ * Get WebView version
+ */
+export async function getWebViewVersion(deviceId: string): Promise<string> {
+  try {
+    const { stdout } = await execAsync(
+      `adb -s ${deviceId} shell dumpsys package com.google.android.webview | grep versionName`
+    );
+    const match = stdout.match(/versionName=([^\s]+)/);
+    return match ? match[1] : 'unknown';
+  } catch (e) {
+    return 'unknown';
+  }
+}

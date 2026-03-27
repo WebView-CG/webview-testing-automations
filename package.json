@@ -1,0 +1,40 @@
+{
+  "name": "webview-testing",
+  "version": "1.0.0",
+  "description": "Automated testing infrastructure for WebViews using Playwright",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:android": "playwright test tests/android",
+    "test:ios": "playwright test tests/ios",
+    "appium": "appium",
+    "setup:android-app": "cd apps && git clone https://github.com/WebView-CG/CanIAndroidWebView.git",
+    "setup:ios-app": "cd apps && git clone https://github.com/WebView-CG/CanIWKWebView.git",
+    "upload-results": "tsx src/upload/upload-results.ts",
+    "build": "tsc"
+  },
+  "keywords": [
+    "webview",
+    "testing",
+    "playwright",
+    "appium",
+    "android",
+    "ios"
+  ],
+  "author": "WebView Community Group",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@octokit/rest": "^22.0.1",
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.5.0",
+    "appium": "^3.2.2",
+    "appium-uiautomator2-driver": "^7.1.0",
+    "dotenv": "^17.3.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}

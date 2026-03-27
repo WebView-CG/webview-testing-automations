@@ -1,0 +1,85 @@
+name: Android WebView Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  test-android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        api-level: [29, 30, 33]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Clone Android app
+        run: |
+          npm run setup:android-app
+      
+      - name: Build Android app
+        run: |
+          cd apps/CanIAndroidWebView
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      
+      - name: Enable KVM (for faster emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      
+      - name: Run tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          profile: pixel_5
+          script: |
+            adb install -r apps/CanIAndroidWebView/app/build/outputs/apk/debug/app-debug.apk
+            npm run test:android
+      
+      - name: Upload test results
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.RESULTS_UPLOAD_TOKEN }}
+        run: |
+          if [ -f test-results/android-results.json ]; then
+            npm run upload-results test-results/android-results.json
+          fi
+      
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-results-api-${{ matrix.api-level }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 30
