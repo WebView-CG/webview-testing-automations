@@ -1,8 +1,9 @@
 /**
  * Android WebView test against collector.openwebdocs.org
+ * Uses Puppeteer for better WebView compatibility
  */
 
-import { test, expect, chromium } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
   getConnectedDevices,
   launchAndroidApp,
@@ -65,18 +66,21 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
       await launchAndroidApp(deviceId, PACKAGE_NAME, ACTIVITY_NAME);
       
       // Wait for WebView to be ready
-      await sleep(2000);
+      await sleep(3000);
       
-      // Connect to WebView
-      const { browser, context, page } = await connectToWebView(deviceId, PACKAGE_NAME);
+      // Connect to WebView (returns Puppeteer browser/page)
+      const { browser, page } = await connectToWebView(deviceId, PACKAGE_NAME);
       
       // Navigate to collector (if not already there)
-      if (!page.url().includes('collector.openwebdocs.org')) {
-        await page.goto(TEST_URL, { waitUntil: 'networkidle', timeout: 30000 });
+      const currentUrl = page.url();
+      console.log(`Current URL: ${currentUrl}`);
+      
+      if (!currentUrl.includes('collector.openwebdocs.org')) {
+        await page.goto(TEST_URL, { waitUntil: 'networkidle0', timeout: 30000 });
       }
       
       // Wait for page to be fully loaded
-      await page.waitForLoadState('networkidle');
+      await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
       
       // Verify page loaded
       const title = await page.title();
@@ -89,7 +93,7 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
       testResult.results['page-load'] = {
         status: 'passed',
         duration: Date.now() - startTime,
-        data: { title }
+        data: { title, url: page.url() }
       };
       
       await browser.close();
@@ -107,27 +111,23 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
     const startTime = Date.now();
     
     try {
-      const { browser, context, page } = await connectToWebView(deviceId, PACKAGE_NAME);
+      const { browser, page } = await connectToWebView(deviceId, PACKAGE_NAME);
       
       // Ensure we're on the collector page
       if (!page.url().includes('collector.openwebdocs.org')) {
-        await page.goto(TEST_URL, { waitUntil: 'networkidle' });
+        await page.goto(TEST_URL, { waitUntil: 'networkidle0' });
       }
       
       // Wait for collector to run
-      await page.waitForLoadState('networkidle');
-      await sleep(5000); // Give collector time to detect features
+      await page.waitForNetworkIdle({ timeout: 10000 }).catch(() => {});
+      await sleep(5000);
       
-      // Try to get results from the page
+      // Get collector data
       const collectorData = await page.evaluate(() => {
-        // Check if collector has results available
-        if (typeof window !== 'undefined') {
-          return {
-            userAgent: navigator.userAgent,
-            features: (window as any).__collector_results || {}
-          };
-        }
-        return null;
+        return {
+          userAgent: navigator.userAgent,
+          features: (window as any).__collector_results || {}
+        };
       });
       
       console.log('Collector data:', JSON.stringify(collectorData, null, 2));
@@ -153,7 +153,7 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
     const startTime = Date.now();
     
     try {
-      const { browser, context, page } = await connectToWebView(deviceId, PACKAGE_NAME);
+      const { browser, page } = await connectToWebView(deviceId, PACKAGE_NAME);
       
       // Test basic JavaScript features
       const jsTests = await page.evaluate(() => {
@@ -163,7 +163,7 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
           indexedDB: typeof indexedDB !== 'undefined',
           fetch: typeof fetch !== 'undefined',
           promise: typeof Promise !== 'undefined',
-          asyncAwait: true, // If this runs, async/await works
+          asyncAwait: true,
           serviceWorker: 'serviceWorker' in navigator,
           webgl: (() => {
             const canvas = document.createElement('canvas');

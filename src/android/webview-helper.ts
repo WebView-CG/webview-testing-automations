@@ -1,9 +1,10 @@
 /**
  * Android WebView connection utilities
- * Handles connecting Playwright to Android WebView via Chrome DevTools Protocol
+ * Handles connecting to Android WebView via Chrome DevTools Protocol using Puppeteer
  */
 
 import { chromium, Browser, BrowserContext, Page } from '@playwright/test';
+import puppeteer from 'puppeteer-core';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -91,9 +92,9 @@ export async function installAPK(deviceId: string, apkPath: string): Promise<voi
 }
 
 /**
- * Connect Playwright to Android WebView
+ * Connect to Android WebView using Puppeteer (better WebView compatibility than Playwright)
  */
-export async function connectToWebView(deviceId: string, packageName: string, localPort: number = 9222): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
+export async function connectToWebView(deviceId: string, packageName: string, localPort: number = 9222): Promise<{ browser: any; page: any }> {
   // Get WebView sockets
   const webviews = await getWebViewSockets(deviceId);
   
@@ -129,7 +130,6 @@ export async function connectToWebView(deviceId: string, packageName: string, lo
   await forwardWebViewPort(deviceId, targetWebView.socketName, localPort);
   
   // Get the WebSocket endpoint URL for the page
-  // Android WebView exposes pages at /json endpoint
   const response = await fetch(`http://localhost:${localPort}/json`);
   const pages = await response.json();
   
@@ -137,31 +137,23 @@ export async function connectToWebView(deviceId: string, packageName: string, lo
     throw new Error('No pages found in WebView. Make sure a page is loaded.');
   }
   
-  // Get the first page's WebSocket debugger URL
   const pageInfo = pages[0];
   console.log(`Connecting to page: ${pageInfo.title || pageInfo.url}`);
   console.log(`WebSocket URL: ${pageInfo.webSocketDebuggerUrl}`);
   
-  // Connect to the WebSocket directly
-  // This bypasses Playwright's browser-level CDP commands
-  const browser = await chromium.connectOverCDP(pageInfo.webSocketDebuggerUrl);
+  // Use Puppeteer to connect - it handles WebView better than Playwright
+  const browser = await puppeteer.connect({
+    browserWSEndpoint: pageInfo.webSocketDebuggerUrl,
+    defaultViewport: null,
+  });
   
-  const contexts = browser.contexts();
+  const browserPages = await browser.pages();
   
-  if (contexts.length === 0) {
-    throw new Error('No browser contexts found');
+  if (browserPages.length === 0) {
+    throw new Error('No pages found after connection');
   }
   
-  const context = contexts[0];
-  const contextPages = context.pages();
-  
-  if (contextPages.length === 0) {
-    // Wait for page to be created
-    const page = await context.waitForEvent('page', { timeout: 10000 });
-    return { browser, context, page };
-  }
-  
-  return { browser, context, page: contextPages[0] };
+  return { browser, page: browserPages[0] };
 }
 
 /**
