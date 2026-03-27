@@ -9,7 +9,7 @@ on:
       upload_results:
         description: 'Upload results to GitHub'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 jobs:
