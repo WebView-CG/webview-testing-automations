@@ -61,7 +61,8 @@ export async function getWebViewSockets(deviceId: string): Promise<WebViewInfo[]
     
     return webviews;
   } catch (error) {
-    console.error('Failed to get WebView sockets:', error);
+    // No WebView sockets found - this is expected if WebView debugging is not enabled
+    console.log('No WebView debugging sockets found. Make sure the app has WebView.setWebContentsDebuggingEnabled(true)');
     return [];
   }
 }
@@ -95,11 +96,34 @@ export async function installAPK(deviceId: string, apkPath: string): Promise<voi
 export async function connectToWebView(deviceId: string, packageName: string, localPort: number = 9222): Promise<{ browser: Browser; context: BrowserContext; page: Page }> {
   // Get WebView sockets
   const webviews = await getWebViewSockets(deviceId);
+  
+  if (webviews.length === 0) {
+    throw new Error(
+      `No WebView debugging sockets found on device ${deviceId}.\n` +
+      `This usually means:\n` +
+      `1. The app is not running\n` +
+      `2. The app doesn't have WebView.setWebContentsDebuggingEnabled(true)\n` +
+      `3. No WebView has been loaded yet\n\n` +
+      `To fix: Add this to your app's MainActivity onCreate():\n` +
+      `  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {\n` +
+      `    WebView.setWebContentsDebuggingEnabled(true)\n` +
+      `  }`
+    );
+  }
+  
+  console.log('Available WebViews:', webviews.map(w => `${w.packageName} (PID: ${w.pid})`).join(', '));
+  
   const targetWebView = webviews.find(wv => wv.packageName.includes(packageName));
   
   if (!targetWebView) {
-    throw new Error(`No WebView found for package: ${packageName}`);
+    throw new Error(
+      `No WebView found for package: ${packageName}\n` +
+      `Available packages: ${webviews.map(w => w.packageName).join(', ')}\n` +
+      `Make sure the app is running and has loaded a WebView.`
+    );
   }
+  
+  console.log(`Connecting to WebView: ${targetWebView.packageName} (PID: ${targetWebView.pid})`);
   
   // Forward port
   await forwardWebViewPort(deviceId, targetWebView.socketName, localPort);

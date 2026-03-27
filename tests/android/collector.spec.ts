@@ -14,7 +14,7 @@ import { createTestResult, sleep } from '../../src/common/utils';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-const PACKAGE_NAME = 'com.example.caniandroidwebview'; // TODO: Update with actual package name
+const PACKAGE_NAME = 'com.caniwebview.android';
 const ACTIVITY_NAME = `${PACKAGE_NAME}.MainActivity`;
 const TEST_URL = 'https://collector.openwebdocs.org/';
 
