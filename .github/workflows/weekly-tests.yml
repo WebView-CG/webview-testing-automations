@@ -72,7 +72,7 @@ jobs:
             npm run test:android
       
       - name: Upload results to webview-bcd-results
-        if: always() && (github.event_name == 'schedule' || inputs.upload_results == 'true')
+        if: always() && (github.event_name == 'schedule' || inputs.upload_results == true)
         env:
           GITHUB_TOKEN: ${{ secrets.RESULTS_UPLOAD_TOKEN }}
         run: |
