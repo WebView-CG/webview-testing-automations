@@ -71,15 +71,12 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
       // Connect to WebView (CDP client)
       const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
       
-      // Get current URL
-      const { result: { url } } = await cdp.send('Page.getNavigationHistory');
-      console.log(`Current URL: ${url || 'unknown'}`);
+      // Navigate to collector
+      console.log(`Navigating to: ${TEST_URL}`);
+      await cdp.send('Page.navigate', { url: TEST_URL });
       
-      // Navigate if needed
-      if (!url || !url.includes('collector.openwebdocs.org')) {
-        await cdp.send('Page.navigate', { url: TEST_URL });
-        await sleep(3000);
-      }
+      // Wait for navigation
+      await sleep(5000);
       
       // Get page title
       const { result } = await cdp.send('Runtime.evaluate', {
@@ -88,6 +85,14 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
       });
       const title = result.value;
       console.log('Page title:', title);
+      
+      // Get URL
+      const { result: urlResult } = await cdp.send('Runtime.evaluate', {
+        expression: 'window.location.href',
+        returnByValue: true
+      });
+      const url = urlResult.value;
+      console.log('Page URL:', url);
       
       expect(title).toBeTruthy();
       
@@ -122,16 +127,11 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
     try {
       const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
       
-      // Check URL
-      const { result: { url } } = await cdp.send('Page.getNavigationHistory');
-      
-      if (!url || !url.includes('collector.openwebdocs.org')) {
-        await cdp.send('Page.navigate', { url: TEST_URL });
-        await sleep(5000);
-      }
+      // Navigate to collector
+      await cdp.send('Page.navigate', { url: TEST_URL });
       
       // Wait for collector to run
-      await sleep(10000);
+      await sleep(15000);
       
       // Get collector data
       const { result } = await cdp.send('Runtime.evaluate', {
