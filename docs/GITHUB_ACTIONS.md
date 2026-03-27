@@ -2,22 +2,15 @@
 
 This repository is configured to automatically run WebView tests and upload results.
 
-## Workflows
+## Workflow
 
-### 1. `weekly-tests.yml` - Main Automated Testing
+### `weekly-tests.yml` - Automated WebView Testing
 **Schedule**: Every Sunday at 2 AM UTC  
-**Platforms**: Android (API 29, 30, 33, 34) + iOS (17.2, 17.4)  
-**Auto-upload**: ✅ Yes (to webview-bcd-results)
-
-### 2. `android-tests.yml` - Android Only
-**Triggers**: Push to main, PRs, Manual, Weekly (Mondays)  
-**Platforms**: Android (API 29, 30, 33)  
-**Auto-upload**: ✅ Yes (scheduled runs only)
-
-### 3. `ios-tests.yml` - iOS Only  
-**Triggers**: Push to main, PRs, Manual, Weekly (Tuesdays)  
-**Platforms**: iOS (16.4, 17.0)  
-**Auto-upload**: ✅ Yes (scheduled runs only)
+**Platforms**: 
+- Android: API 29, 30, 33, 34
+- iOS: 17.2, 17.4  
+**Auto-upload**: ✅ Yes (to webview-bcd-results)  
+**Manual trigger**: ✅ Available via workflow_dispatch
 
 ## Required Secrets
 
@@ -40,12 +33,10 @@ A GitHub Personal Access Token with `repo` scope to upload to webview-bcd-result
 ## Schedule Overview
 
 ```
-Sunday    2 AM UTC  → Weekly full test run (all platforms)
-Monday    2 AM UTC  → Android tests (if enabled separately)
-Tuesday   2 AM UTC  → iOS tests (if enabled separately)
+Sunday  2 AM UTC  → Weekly full test run (Android + iOS, all versions)
 ```
 
-**Recommendation**: Keep only `weekly-tests.yml` enabled for weekly runs, disable schedules in android/ios-tests.yml to avoid duplicates.
+Results automatically uploaded to webview-bcd-results repository.
 
 ## Manual Triggers
 
