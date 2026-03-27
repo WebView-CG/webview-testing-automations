@@ -140,13 +140,11 @@ export async function connectToWebView(deviceId: string, packageName: string, lo
   // Get the first page's WebSocket debugger URL
   const pageInfo = pages[0];
   console.log(`Connecting to page: ${pageInfo.title || pageInfo.url}`);
+  console.log(`WebSocket URL: ${pageInfo.webSocketDebuggerUrl}`);
   
-  // Connect directly to the page's WebSocket endpoint
-  // Use connectOverCDP with the specific endpoint URL
-  const browser = await chromium.connectOverCDP({
-    endpointURL: `http://localhost:${localPort}`,
-    wsEndpoint: pageInfo.webSocketDebuggerUrl
-  });
+  // Connect to the WebSocket directly
+  // This bypasses Playwright's browser-level CDP commands
+  const browser = await chromium.connectOverCDP(pageInfo.webSocketDebuggerUrl);
   
   const contexts = browser.contexts();
   
