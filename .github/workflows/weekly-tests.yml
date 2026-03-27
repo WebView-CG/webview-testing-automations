@@ -159,10 +159,17 @@ jobs:
           xcrun simctl install $SIMULATOR apps/CanIWKWebView/build/Build/Products/Debug-iphonesimulator/CanIWKWebView.app
           echo "SIMULATOR_UDID=$SIMULATOR" >> $GITHUB_ENV
       
-      - name: Start Appium server
+      - name: Install ios-webkit-debug-proxy
+        run: brew install ios-webkit-debug-proxy
+      
+      - name: Start ios-webkit-debug-proxy
         run: |
-          npx appium &
-          sleep 5
+          # Start proxy in background for the simulator
+          ios_webkit_debug_proxy -c ${{ env.SIMULATOR_UDID }}:9222 -d &
+          PROXY_PID=$!
+          echo "PROXY_PID=$PROXY_PID" >> $GITHUB_ENV
+          sleep 3
+          echo "ios-webkit-debug-proxy started with PID $PROXY_PID"
       
       - name: Run tests
         run: npm run test:ios
