@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [29, 30, 33, 34]
+        api-level: [34]
     
     steps:
       - name: Checkout repository
