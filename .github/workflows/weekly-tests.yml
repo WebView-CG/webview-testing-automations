@@ -65,11 +65,17 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
+            set -e
             adb install -r apps/CanIAndroidWebView/app/build/outputs/apk/debug/app-debug.apk
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
             npm run test:android
+            if [ $? -ne 0 ]; then
+              echo "❌ Tests failed"
+              exit 1
+            fi
+            echo "✅ Tests passed"
       
       - name: Upload results to webview-bcd-results
         if: always() && (github.event_name == 'schedule' || inputs.upload_results == true)
@@ -198,8 +204,14 @@ jobs:
       
       - name: Run tests
         run: |
+          set -e
           echo "Starting iOS WebView tests..."
           npm run test:ios
+          if [ $? -ne 0 ]; then
+            echo "❌ Tests failed"
+            exit 1
+          fi
+          echo "✅ Tests passed"
       
       - name: Show Appium logs on failure
         if: failure()
@@ -260,16 +272,34 @@ jobs:
           echo "# WebView Test Results Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Date**: $(date -u +"%Y-%m-%d %H:%M UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "**Run**: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if jobs succeeded
+          ANDROID_SUCCESS="${{ needs.test-android-webview.result == 'success' }}"
+          IOS_SUCCESS="${{ needs.test-ios-webview.result == 'success' }}"
           
           echo "## Android Results" >> $GITHUB_STEP_SUMMARY
           for dir in all-results/android-*; do
             if [ -d "$dir" ]; then
               api=$(basename "$dir" | sed 's/android-api-\([0-9]*\)-.*/\1/')
               if [ -f "$dir/test-results/android-results.json" ]; then
-                echo "- ✅ API Level $api: Tests completed" >> $GITHUB_STEP_SUMMARY
+                # Check test status from results
+                status=$(jq -r '.results["bcd-collection"].status // "unknown"' "$dir/test-results/android-results.json")
+                device=$(jq -r '.deviceModel // "unknown"' "$dir/test-results/android-results.json")
+                webview=$(jq -r '.webviewVersion // "unknown"' "$dir/test-results/android-results.json")
+                
+                if [ "$status" = "passed" ]; then
+                  echo "- ✅ **API Level $api** - $device - WebView $webview" >> $GITHUB_STEP_SUMMARY
+                else
+                  echo "- ❌ **API Level $api** - $device - Test $status" >> $GITHUB_STEP_SUMMARY
+                fi
+                
+                # Show BCD data count
+                bcdCount=$(jq -r '.results["bcd-collection"].data.bcdCount // 0' "$dir/test-results/android-results.json")
+                echo "  - Collected $bcdCount BCD features" >> $GITHUB_STEP_SUMMARY
               else
-                echo "- ❌ API Level $api: No results" >> $GITHUB_STEP_SUMMARY
+                echo "- ❌ **API Level $api** - No results file generated" >> $GITHUB_STEP_SUMMARY
               fi
             fi
           done
@@ -280,12 +310,34 @@ jobs:
             if [ -d "$dir" ]; then
               version=$(basename "$dir" | sed 's/ios-\([0-9.]*\)-.*/\1/')
               if [ -f "$dir/test-results/ios-results.json" ]; then
-                echo "- ✅ iOS $version: Tests completed" >> $GITHUB_STEP_SUMMARY
+                # Check test status from results
+                status=$(jq -r '.results["bcd-collection"].status // "unknown"' "$dir/test-results/ios-results.json")
+                device=$(jq -r '.deviceModel // "unknown"' "$dir/test-results/ios-results.json")
+                webview=$(jq -r '.webviewVersion // "unknown"' "$dir/test-results/ios-results.json")
+                
+                if [ "$status" = "passed" ]; then
+                  echo "- ✅ **iOS $version** - $device - $webview" >> $GITHUB_STEP_SUMMARY
+                else
+                  echo "- ❌ **iOS $version** - $device - Test $status" >> $GITHUB_STEP_SUMMARY
+                fi
+                
+                # Show BCD data count
+                bcdCount=$(jq -r '.results["bcd-collection"].data.bcdCount // 0' "$dir/test-results/ios-results.json")
+                echo "  - Collected $bcdCount BCD features" >> $GITHUB_STEP_SUMMARY
               else
-                echo "- ❌ iOS $version: No results" >> $GITHUB_STEP_SUMMARY
+                echo "- ❌ **iOS $version** - No results file generated" >> $GITHUB_STEP_SUMMARY
               fi
             fi
           done
           
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📊 View detailed results at: https://github.com/WebView-CG/webview-bcd-results" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **View detailed results**: [webview-bcd-results](https://github.com/WebView-CG/webview-bcd-results)" >> $GITHUB_STEP_SUMMARY
+          
+          # List uploaded commits
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Uploaded Results" >> $GITHUB_STEP_SUMMARY
+          echo "Results uploaded to webview-bcd-results repository with co-author attribution:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Co-authored-by: GitHub Copilot <copilot@github.com>" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
