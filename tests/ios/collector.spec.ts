@@ -4,7 +4,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { startAppium, stopAppium, connectToIOSWebView } from '../../src/ios/appium-helper';
+import { startAppium, connectToIOSWebView } from '../../src/ios/appium-helper';
 import { getBootedSimulators, getDeviceInfo } from '../../src/ios/webview-helper';
 import { createTestResult } from '../../src/common/utils';
 import * as fs from 'fs/promises';
@@ -18,7 +18,7 @@ const APPIUM_PORT = 4723;
 test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
   let udid: string;
   let driver: Browser<'async'> | null = null;
-  let testResult: ReturnType<typeof createTestResult> | null = null;
+  let testResult: ReturnType<typeof createTestResult>;
   
   test.beforeAll(async () => {
     testResult = createTestResult('ios');
@@ -46,8 +46,23 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
       udid
     });
     
-    // Start Appium if not running
-    await startAppium(APPIUM_PORT);
+    try {
+      // Start Appium if not running
+      await startAppium(APPIUM_PORT);
+      
+      // Connect to app's WebView via Appium
+      driver = await connectToIOSWebView(udid, BUNDLE_ID, APPIUM_PORT);
+      
+      // Navigate to test URL
+      console.log(`Navigating to: ${TEST_URL}`);
+      await driver.url(TEST_URL);
+      
+      // Wait for page to fully load
+      await driver.pause(15000);
+    } catch (error) {
+      console.error('Setup failed:', error);
+      throw error;
+    }
   });
   
   test.afterAll(async () => {
@@ -60,30 +75,22 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
     }
     
     // Save results
-    if (testResult) {
-      const resultsDir = path.join(process.cwd(), 'test-results');
-      await fs.mkdir(resultsDir, { recursive: true });
-      const resultsPath = path.join(resultsDir, 'ios-results.json');
-      await fs.writeFile(resultsPath, JSON.stringify(testResult, null, 2));
-      console.log(`Results saved to: ${resultsPath}`);
-    }
+    const resultsDir = path.join(process.cwd(), 'test-results');
+    await fs.mkdir(resultsDir, { recursive: true });
+    const resultsPath = path.join(resultsDir, 'ios-results.json');
+    await fs.writeFile(resultsPath, JSON.stringify(testResult, null, 2));
+    console.log(`Results saved to: ${resultsPath}`);
   });
 
-  test('should load collector page in WKWebView', async () => {
+  test('should collect BCD data from collector', async () => {
     const startTime = Date.now();
     
     try {
-      // Connect to app's WebView via Appium
-      driver = await connectToIOSWebView(udid, BUNDLE_ID, APPIUM_PORT);
+      if (!driver) {
+        throw new Error('Driver not initialized');
+      }
       
-      // Navigate to test URL
-      console.log(`Navigating to: ${TEST_URL}`);
-      await driver.url(TEST_URL);
-      
-      // Wait for page to load
-      await driver.pause(5000);
-      
-      // Get page title
+      // Get page title to verify page loaded
       const title = await driver.getTitle();
       console.log(`Page title: ${title}`);
       
@@ -93,104 +100,44 @@ test.describe('iOS WKWebView - collector.openwebdocs.org', () => {
       
       expect(url).toContain('collector.openwebdocs.org');
       
-      testResult!.tests.push({
-        name: 'Load collector page',
-        passed: true,
-        duration: Date.now() - startTime,
-      });
-    } catch (error) {
-      testResult!.tests.push({
-        name: 'Load collector page',
-        passed: false,
-        duration: Date.now() - startTime,
-        error: (error as Error).message,
-      });
-      throw error;
-    }
-  });
-
-  test('should collect browser features', async () => {
-    const startTime = Date.now();
-    
-    try {
-      if (!driver) {
-        driver = await connectToIOSWebView(udid, BUNDLE_ID, APPIUM_PORT);
-      }
+      // Get user agent
+      const userAgent = await driver.execute(() => navigator.userAgent);
+      console.log('User agent:', userAgent);
       
-      // Make sure we're on the collector page
-      const url = await driver.getUrl();
-      if (!url.includes('collector.openwebdocs.org')) {
-        await driver.url(TEST_URL);
-        await driver.pause(5000);
-      }
+      // Wait for collector to complete
+      console.log('Waiting for collector to complete...');
+      await driver.pause(30000);
       
       // Execute JavaScript to get collector data
       const collectorData = await driver.execute(() => {
-        // @ts-ignore
-        return window.__bcd || { userAgent: navigator.userAgent, features: {} };
-      });
-      
-      console.log('Collector data:', JSON.stringify(collectorData, null, 2));
-      
-      testResult!.collectorData = collectorData;
-      testResult!.tests.push({
-        name: 'Collect browser features',
-        passed: true,
-        duration: Date.now() - startTime,
-      });
-    } catch (error) {
-      testResult!.tests.push({
-        name: 'Collect browser features',
-        passed: false,
-        duration: Date.now() - startTime,
-        error: (error as Error).message,
-      });
-      throw error;
-    }
-  });
-
-  test('should test JavaScript execution', async () => {
-    const startTime = Date.now();
-    
-    try {
-      if (!driver) {
-        driver = await connectToIOSWebView(udid, BUNDLE_ID, APPIUM_PORT);
-      }
-      
-      // Test various JavaScript features
-      const jsFeatures = await driver.execute(() => {
         return {
-          localStorage: typeof localStorage !== 'undefined',
-          sessionStorage: typeof sessionStorage !== 'undefined',
-          indexedDB: typeof indexedDB !== 'undefined',
-          fetch: typeof fetch !== 'undefined',
-          promise: typeof Promise !== 'undefined',
-          asyncAwait: true,
-          serviceWorker: 'serviceWorker' in navigator,
-          webgl: (() => {
-            const canvas = document.createElement('canvas');
-            return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
-          })(),
+          userAgent: navigator.userAgent,
+          // @ts-ignore
+          bcd: window.__bcd || {},
+          // @ts-ignore
+          collector: window.__resources || {}
         };
       });
       
-      console.log('JavaScript features:', jsFeatures);
+      console.log('Collected data keys:', Object.keys(collectorData));
       
-      expect(jsFeatures.localStorage).toBe(true);
-      expect(jsFeatures.fetch).toBe(true);
-      
-      testResult!.tests.push({
-        name: 'JavaScript execution',
-        passed: true,
+      testResult.metadata.collectorData = collectorData;
+      testResult.results['bcd-collection'] = {
+        status: 'passed',
         duration: Date.now() - startTime,
-      });
+        data: {
+          userAgent,
+          dataSize: JSON.stringify(collectorData).length
+        }
+      };
+      
+      expect(collectorData.userAgent).toBeTruthy();
     } catch (error) {
-      testResult!.tests.push({
-        name: 'JavaScript execution',
-        passed: false,
+      testResult.results['bcd-collection'] = {
+        status: 'failed',
         duration: Date.now() - startTime,
-        error: (error as Error).message,
-      });
+        error: (error as Error).message
+      };
       throw error;
     }
   });

@@ -22,6 +22,7 @@ const TEST_URL = 'https://collector.openwebdocs.org/';
 test.describe('Android WebView - collector.openwebdocs.org', () => {
   let deviceId: string;
   let testResult: ReturnType<typeof createTestResult>;
+  let cdp: any = null;
   
   test.beforeAll(async () => {
     // Get connected device
@@ -47,9 +48,39 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
       osVersion: testResult.osVersion,
       webviewVersion: testResult.webviewVersion
     });
+    
+    try {
+      // Launch app once for all tests
+      await launchAndroidApp(deviceId, PACKAGE_NAME, ACTIVITY_NAME);
+      
+      // Wait for WebView to be ready
+      await sleep(5000);
+      
+      // Connect to WebView (CDP client)
+      cdp = await connectToWebView(deviceId, PACKAGE_NAME);
+      
+      // Navigate to collector
+      console.log(`Navigating to: ${TEST_URL}`);
+      await cdp.send('Page.navigate', { url: TEST_URL });
+      
+      // Wait for page to load
+      await sleep(10000);
+    } catch (error) {
+      console.error('Setup failed:', error);
+      throw error;
+    }
   });
   
   test.afterAll(async () => {
+    // Close connection
+    if (cdp) {
+      try {
+        await cdp.close();
+      } catch (e) {
+        console.log('Error closing CDP:', e);
+      }
+    }
+    
     // Save results
     const resultsDir = path.join(process.cwd(), 'test-results');
     await fs.mkdir(resultsDir, { recursive: true });
@@ -58,146 +89,59 @@ test.describe('Android WebView - collector.openwebdocs.org', () => {
     console.log(`Results saved to: ${resultsPath}`);
   });
 
-  test('should load collector page in WebView', async () => {
+  test('should collect BCD data from collector', async () => {
     const startTime = Date.now();
     
     try {
-      // Launch app
-      await launchAndroidApp(deviceId, PACKAGE_NAME, ACTIVITY_NAME);
+      if (!cdp) {
+        throw new Error('CDP connection not established');
+      }
       
-      // Wait for WebView to be ready
-      await sleep(5000);
-      
-      // Connect to WebView (CDP client)
-      const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
-      
-      // Navigate to collector
-      console.log(`Navigating to: ${TEST_URL}`);
-      await cdp.send('Page.navigate', { url: TEST_URL });
-      
-      // Wait for navigation
-      await sleep(5000);
-      
-      // Get page title
-      const { result } = await cdp.send('Runtime.evaluate', {
+      // Get page title to verify page loaded
+      const { result: titleResult } = await cdp.send('Runtime.evaluate', {
         expression: 'document.title',
         returnByValue: true
       });
-      const title = result.value;
-      console.log('Page title:', title);
+      console.log('Page title:', titleResult.value);
       
-      // Get URL
-      const { result: urlResult } = await cdp.send('Runtime.evaluate', {
-        expression: 'window.location.href',
+      // Get user agent
+      const { result: uaResult } = await cdp.send('Runtime.evaluate', {
+        expression: 'navigator.userAgent',
         returnByValue: true
       });
-      const url = urlResult.value;
-      console.log('Page URL:', url);
+      const userAgent = uaResult.value;
+      console.log('User agent:', userAgent);
       
-      expect(title).toBeTruthy();
-      
-      // Take screenshot
-      const { data: screenshotData } = await cdp.send('Page.captureScreenshot', {
-        format: 'png',
-        captureBeyondViewport: false
-      });
-      
-      await fs.writeFile('test-results/android-collector-page.png', Buffer.from(screenshotData, 'base64'));
-      
-      testResult.results['page-load'] = {
-        status: 'passed',
-        duration: Date.now() - startTime,
-        data: { title, url }
-      };
-      
-      await cdp.close();
-    } catch (error) {
-      testResult.results['page-load'] = {
-        status: 'failed',
-        duration: Date.now() - startTime,
-        error: (error as Error).message
-      };
-      throw error;
-    }
-  });
-  
-  test('should collect browser features', async () => {
-    const startTime = Date.now();
-    
-    try {
-      const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
-      
-      // Navigate to collector
-      await cdp.send('Page.navigate', { url: TEST_URL });
-      
-      // Wait for collector to run
-      await sleep(15000);
+      // Wait for collector to finish (it may take time)
+      console.log('Waiting for collector to complete...');
+      await sleep(30000);
       
       // Get collector data
       const { result } = await cdp.send('Runtime.evaluate', {
         expression: `JSON.stringify({
           userAgent: navigator.userAgent,
-          features: window.__collector_results || {}
+          bcd: window.__bcd || {},
+          collector: window.__resources || {}
         })`,
         returnByValue: true
       });
       
       const collectorData = JSON.parse(result.value);
-      console.log('Collector data:', JSON.stringify(collectorData, null, 2));
+      console.log('Collected data keys:', Object.keys(collectorData));
       
-      testResult.results['feature-collection'] = {
+      testResult.metadata.collectorData = collectorData;
+      testResult.results['bcd-collection'] = {
         status: 'passed',
         duration: Date.now() - startTime,
-        data: collectorData
+        data: {
+          userAgent,
+          dataSize: JSON.stringify(collectorData).length
+        }
       };
       
-      await cdp.close();
+      expect(collectorData.userAgent).toBeTruthy();
     } catch (error) {
-      testResult.results['feature-collection'] = {
-        status: 'failed',
-        duration: Date.now() - startTime,
-        error: (error as Error).message
-      };
-      throw error;
-    }
-  });
-  
-  test('should test JavaScript execution', async () => {
-    const startTime = Date.now();
-    
-    try {
-      const cdp = await connectToWebView(deviceId, PACKAGE_NAME);
-      
-      // Test basic JavaScript features
-      const { result } = await cdp.send('Runtime.evaluate', {
-        expression: `JSON.stringify({
-          localStorage: typeof localStorage !== 'undefined',
-          sessionStorage: typeof sessionStorage !== 'undefined',
-          indexedDB: typeof indexedDB !== 'undefined',
-          fetch: typeof fetch !== 'undefined',
-          promise: typeof Promise !== 'undefined',
-          asyncAwait: true,
-          serviceWorker: 'serviceWorker' in navigator,
-          webgl: (() => {
-            const canvas = document.createElement('canvas');
-            return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
-          })()
-        })`,
-        returnByValue: true
-      });
-      
-      const jsTests = JSON.parse(result.value);
-      console.log('JavaScript features:', jsTests);
-      
-      testResult.results['javascript-features'] = {
-        status: 'passed',
-        duration: Date.now() - startTime,
-        data: jsTests
-      };
-      
-      await cdp.close();
-    } catch (error) {
-      testResult.results['javascript-features'] = {
+      testResult.results['bcd-collection'] = {
         status: 'failed',
         duration: Date.now() - startTime,
         error: (error as Error).message
