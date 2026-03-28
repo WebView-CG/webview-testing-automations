@@ -65,17 +65,11 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            set -e
             adb install -r apps/CanIAndroidWebView/app/build/outputs/apk/debug/app-debug.apk
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
             npm run test:android
-            if [ $? -ne 0 ]; then
-              echo "❌ Tests failed"
-              exit 1
-            fi
-            echo "✅ Tests passed"
       
       - name: Upload results to webview-bcd-results
         if: always() && (github.event_name == 'schedule' || inputs.upload_results == true)
@@ -203,15 +197,7 @@ jobs:
           echo "Simulator ready for testing"
       
       - name: Run tests
-        run: |
-          set -e
-          echo "Starting iOS WebView tests..."
-          npm run test:ios
-          if [ $? -ne 0 ]; then
-            echo "❌ Tests failed"
-            exit 1
-          fi
-          echo "✅ Tests passed"
+        run: npm run test:ios
       
       - name: Show Appium logs on failure
         if: failure()
@@ -332,12 +318,34 @@ jobs:
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "📊 **View detailed results**: [webview-bcd-results](https://github.com/WebView-CG/webview-bcd-results)" >> $GITHUB_STEP_SUMMARY
           
-          # List uploaded commits
+          # Check if uploads were attempted
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.upload_results }}" = "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📤 Upload Status" >> $GITHUB_STEP_SUMMARY
+            
+            # Count successful uploads
+            uploaded=0
+            for dir in all-results/*/; do
+              if [ -f "$dir/test-results/*-results.json" ]; then
+                uploaded=$((uploaded + 1))
+              fi
+            done
+            
+            if [ $uploaded -gt 0 ]; then
+              echo "✅ Results uploaded to [webview-bcd-results](https://github.com/WebView-CG/webview-bcd-results)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "All commits include co-author attribution:" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "Co-authored-by: GitHub Copilot <copilot@github.com>" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ No results were uploaded (files may not have been generated)" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ Results upload skipped (manual run without upload flag)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Uploaded Results" >> $GITHUB_STEP_SUMMARY
-          echo "Results uploaded to webview-bcd-results repository with co-author attribution:" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Co-authored-by: GitHub Copilot <copilot@github.com>" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "📊 **View all results**: [webview-bcd-results](https://github.com/WebView-CG/webview-bcd-results)" >> $GITHUB_STEP_SUMMARY
