@@ -175,20 +175,27 @@ jobs:
       
       - name: Build iOS app
         run: |
-          cd apps/CanIWKWebView
-          xcodebuild -project CanIWKWebView.xcodeproj \
+          xcodebuild -project apps/CanIWKWebView/CanIWKWebView.xcodeproj \
             -scheme CanIWKWebView \
             -configuration Debug \
             -sdk iphonesimulator \
-            -derivedDataPath build \
+            -derivedDataPath ${{ github.workspace }}/build \
             CODE_SIGNING_ALLOWED=NO
-      
+          echo "Built artifacts:"
+          find ${{ github.workspace }}/build -name "*.app" -type d
+
       - name: Boot simulator and install app
         run: |
+          APP_PATH=$(find ${{ github.workspace }}/build -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ No .app bundle found after build"
+            exit 1
+          fi
+          echo "Using app: $APP_PATH"
           SIMULATOR=$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
           echo "Using simulator: $SIMULATOR"
           xcrun simctl boot $SIMULATOR
-          xcrun simctl install $SIMULATOR apps/CanIWKWebView/build/Build/Products/Debug-iphonesimulator/CanIWKWebView.app
+          xcrun simctl install $SIMULATOR "$APP_PATH"
           echo "SIMULATOR_UDID=$SIMULATOR" >> $GITHUB_ENV
       
       - name: Verify app installation
