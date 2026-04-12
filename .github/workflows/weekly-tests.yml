@@ -192,7 +192,17 @@ jobs:
             exit 1
           fi
           echo "Using app: $APP_PATH"
-          SIMULATOR=$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
+          # Pick simulator type based on the app's supported device families
+          # Family 1 = iPhone, Family 2 = iPad
+          FAMILIES=$(defaults read "$APP_PATH/Info.plist" UIDeviceFamilies 2>/dev/null || echo "1")
+          echo "App device families: $FAMILIES"
+          if echo "$FAMILIES" | grep -q "2" && ! echo "$FAMILIES" | grep -q "1"; then
+            DEVICE_TYPE="iPad"
+          else
+            DEVICE_TYPE="iPhone"
+          fi
+          echo "Selecting $DEVICE_TYPE simulator"
+          SIMULATOR=$(xcrun simctl list devices available | grep "$DEVICE_TYPE" | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
           echo "Using simulator: $SIMULATOR"
           xcrun simctl boot $SIMULATOR
           xcrun simctl install $SIMULATOR "$APP_PATH"
