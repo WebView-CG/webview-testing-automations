@@ -179,30 +179,22 @@ jobs:
             -scheme CanIWKWebView \
             -configuration Debug \
             -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath ${{ github.workspace }}/build \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            TARGETED_DEVICE_FAMILY=1
           echo "Built artifacts:"
-          find ${{ github.workspace }}/build -name "*.app" -type d
+          find ${{ github.workspace }}/build/Build/Products/Debug-iphonesimulator -name "*.app" -type d
 
       - name: Boot simulator and install app
         run: |
-          APP_PATH=$(find ${{ github.workspace }}/build -name "*.app" -type d | head -1)
+          APP_PATH=$(find ${{ github.workspace }}/build/Build/Products/Debug-iphonesimulator -name "*.app" -type d | head -1)
           if [ -z "$APP_PATH" ]; then
-            echo "❌ No .app bundle found after build"
+            echo "❌ No .app bundle found in Debug-iphonesimulator"
             exit 1
           fi
           echo "Using app: $APP_PATH"
-          # Pick simulator type based on the app's supported device families
-          # Family 1 = iPhone, Family 2 = iPad
-          FAMILIES=$(defaults read "$APP_PATH/Info.plist" UIDeviceFamilies 2>/dev/null || echo "1")
-          echo "App device families: $FAMILIES"
-          if echo "$FAMILIES" | grep -q "2" && ! echo "$FAMILIES" | grep -q "1"; then
-            DEVICE_TYPE="iPad"
-          else
-            DEVICE_TYPE="iPhone"
-          fi
-          echo "Selecting $DEVICE_TYPE simulator"
-          SIMULATOR=$(xcrun simctl list devices available | grep "$DEVICE_TYPE" | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
+          SIMULATOR=$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
           echo "Using simulator: $SIMULATOR"
           xcrun simctl boot $SIMULATOR
           xcrun simctl install $SIMULATOR "$APP_PATH"
