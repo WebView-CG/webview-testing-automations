@@ -170,9 +170,14 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_${{ matrix.xcode-version }}.app/Contents/Developer
           xcodebuild -version
       
+      - name: Install iOS Simulator runtime
+        run: |
+          sudo xcodebuild -downloadPlatform iOS
+          xcrun simctl list runtimes
+
       - name: List available simulators
         run: xcrun simctl list devices available
-      
+
       - name: Build iOS app
         run: |
           xcodebuild -project apps/CanIWKWebView/CanIWKWebView.xcodeproj \
