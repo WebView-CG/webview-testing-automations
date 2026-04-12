@@ -71,21 +71,31 @@ jobs:
             adb shell settings put global animator_duration_scale 0
             npm run test:android
       
+      - name: Generate app token for results upload
+        if: always() && (github.event_name == 'schedule' || inputs.upload_results == true)
+        id: app-token-android
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RESULTS_APP_ID }}
+          private-key: ${{ secrets.RESULTS_APP_PRIVATE_KEY }}
+          owner: WebView-CG
+          repositories: webview-bcd-results
+
       - name: Upload results to webview-bcd-results
         if: always() && (github.event_name == 'schedule' || inputs.upload_results == true)
         env:
-          GITHUB_TOKEN: ${{ secrets.RESULTS_UPLOAD_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token-android.outputs.token }}
         run: |
           if [ -f test-results/android-results.json ]; then
             echo "📁 Found results file"
             cat test-results/android-results.json | head -20
-            
+
             if [ -z "$GITHUB_TOKEN" ]; then
-              echo "❌ RESULTS_UPLOAD_TOKEN secret not set - skipping upload"
-              echo "⚠️  Configure this secret in repository settings to enable automatic uploads"
+              echo "❌ App token not generated - skipping upload"
+              echo "⚠️  Configure RESULTS_APP_ID and RESULTS_APP_PRIVATE_KEY secrets to enable automatic uploads"
               exit 0
             fi
-            
+
             echo "📤 Uploading results..."
             npm run upload-results test-results/android-results.json
             echo "✅ Results uploaded for Android API ${{ matrix.api-level }}"
@@ -208,21 +218,31 @@ jobs:
           echo "=== Process List ==="
           ps aux | grep -i appium || true
       
+      - name: Generate app token for results upload
+        if: always() && (github.event_name == 'schedule' || inputs.upload_results == 'true')
+        id: app-token-ios
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RESULTS_APP_ID }}
+          private-key: ${{ secrets.RESULTS_APP_PRIVATE_KEY }}
+          owner: WebView-CG
+          repositories: webview-bcd-results
+
       - name: Upload results to webview-bcd-results
         if: always() && (github.event_name == 'schedule' || inputs.upload_results == 'true')
         env:
-          GITHUB_TOKEN: ${{ secrets.RESULTS_UPLOAD_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token-ios.outputs.token }}
         run: |
           if [ -f test-results/ios-results.json ]; then
             echo "📁 Found results file"
             cat test-results/ios-results.json | head -20
-            
+
             if [ -z "$GITHUB_TOKEN" ]; then
-              echo "❌ RESULTS_UPLOAD_TOKEN secret not set - skipping upload"
-              echo "⚠️  Configure this secret in repository settings to enable automatic uploads"
+              echo "❌ App token not generated - skipping upload"
+              echo "⚠️  Configure RESULTS_APP_ID and RESULTS_APP_PRIVATE_KEY secrets to enable automatic uploads"
               exit 0
             fi
-            
+
             echo "📤 Uploading results..."
             npm run upload-results test-results/ios-results.json
             echo "✅ Results uploaded for iOS ${{ matrix.ios-version }}"
@@ -334,11 +354,6 @@ jobs:
             
             if [ $uploaded -gt 0 ]; then
               echo "✅ Results uploaded to [webview-bcd-results](https://github.com/WebView-CG/webview-bcd-results)" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "All commits include co-author attribution:" >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
-              echo "Co-authored-by: GitHub Copilot <copilot@github.com>" >> $GITHUB_STEP_SUMMARY
-              echo '```' >> $GITHUB_STEP_SUMMARY
             else
               echo "⚠️ No results were uploaded (files may not have been generated)" >> $GITHUB_STEP_SUMMARY
             fi
