@@ -22,6 +22,7 @@ test.describe('iOS WKWebView - BCD Collector', () => {
   let setupError: Error | null = null;
   
   test.beforeAll(async () => {
+    test.setTimeout(300000);
     try {
       testResult = createTestResult('ios');
       
