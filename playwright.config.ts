@@ -31,6 +31,7 @@ export default defineConfig({
     {
       name: 'ios-webview',
       testDir: './tests/ios',
+      timeout: 300000,
       use: {
         ...devices['iPhone 13'],
       },

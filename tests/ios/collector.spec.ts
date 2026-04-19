@@ -16,8 +16,6 @@ const TEST_URL = 'https://collector.openwebdocs.org/';
 const APPIUM_PORT = 4723;
 
 test.describe('iOS WKWebView - BCD Collector', () => {
-  test.describe.configure({ timeout: 300000 });
-
   let udid: string;
   let driver: Browser<'async'> | null = null;
   let testResult: ReturnType<typeof createTestResult>;
